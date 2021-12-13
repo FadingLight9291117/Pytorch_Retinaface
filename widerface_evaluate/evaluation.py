@@ -274,11 +274,16 @@ def evaluation(pred, gt_path, iou_thresh=0.5):
         ap = voc_ap(recall, propose)
         aps.append(ap)
 
-    print("==================== Results ====================")
-    print("Easy   Val AP: {}".format(aps[0]))
-    print("Medium Val AP: {}".format(aps[1]))
-    print("Hard   Val AP: {}".format(aps[2]))
-    print("=================================================")
+    info = ("==================== Results ====================\n"
+            f"Easy   Val AP: {aps[0]}\n"
+            f"Medium Val AP: {aps[1]}\n"
+            f"Hard   Val AP: {aps[2]}\n"
+            "=================================================")
+    print(info)
+
+    with open('./results.txt', 'w+') as f:
+        f.write(info)
+
 
 
 if __name__ == '__main__':
