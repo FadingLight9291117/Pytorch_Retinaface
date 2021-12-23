@@ -5,3 +5,7 @@ result
 **/*.so
 **/build
 **/*.c
+
+data/widerface
+weights
+widerface_evaluate
