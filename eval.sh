@@ -1,13 +1,14 @@
-python test_widerface.py
 
+weight_path=./result/resnet50/
+
+python test_widerface.py -m $weight_path
+# evaluation
 cd widerface_evaluate
 
-python evaluation.py >> result.txt
+name=$(basename $weight_path)
+
+echo $name >> results.txt
+
+python evaluation.py >> results.txt
 
 cd ..
-
-python test_widerface.py -m ./result/mobilenet0.25_epoch_230.pth
-
-cd widerface_evaluate
-
-python evaluation.py >> result.txt

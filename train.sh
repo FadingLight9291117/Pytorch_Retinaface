@@ -1,1 +1,1 @@
-python train.py --network mobile0.25 --resume_net ./result/mobilenet0.25_epoch_235.pth --resume_epoch 235
+python train.py --network resnet50

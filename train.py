@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 import argparse
 import time
 import datetime
@@ -66,7 +67,10 @@ weight_decay = args.weight_decay
 initial_lr = args.lr
 gamma = args.gamma
 training_dataset = args.training_dataset
-save_folder = args.save_folder
+save_folder = os.path.join(args.save_folder, args.network)
+
+if not os.path.exists(save_folder):
+    os.mkdir(save_folder)
 
 # config log =============================================================
 log_path = f'{save_folder}/train.log'
@@ -98,29 +102,13 @@ net = RetinaFace(cfg=cfg)
 logger.debug("Printing net...")
 logger.debug(net)
 
-# load resume weight =====================================================
-if args.resume_net is not None:
-    logger.debug('Loading resume network...')
-    state_dict = torch.load(args.resume_net)
-    # create new OrderedDict that does not contain `module.`
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        head = k[:7]
-        if head == 'module.':
-            name = k[7:]  # remove `module.`
-        else:
-            name = k
-        new_state_dict[name] = v
-    net.load_state_dict(new_state_dict)
-# ========================================================================
 
 if num_gpu > 1 and gpu_train:
     net = torch.nn.DataParallel(net).cuda()
 else:
     net = net.cuda()
 
-cudnn.benchmark = True
+cudnn.benchmark = False
 
 
 optimizer = optim.SGD(net.parameters(), lr=initial_lr,
@@ -131,6 +119,21 @@ priorbox = PriorBox(cfg, image_size=(img_dim, img_dim))
 with torch.no_grad():
     priors = priorbox.forward()
     priors = priors.cuda()
+
+# load resume weight =====================================================
+if args.resume_net is not None:
+    logger.debug('Loading resume network...')
+    state_dict = torch.load(args.resume_net)
+    for key in state_dict.keys():
+        if key == 'model':
+            net.load_state_dict(state_dict[key])
+        if key == 'optimizer':
+            optimizer.load_state_dict(state_dict[key])
+        # if key == 'scaler':
+            # scaler.load_state_dict(state_dict[key])
+        # if key == 'scheduler':
+        #     scheduler.load_state_dict(state_dict[key])
+# ========================================================================
 
 
 def train():
@@ -197,21 +200,42 @@ def train():
             }
             logger.debug('train: ' + str(info))
 
-            tb_writer.add_scalar('loc_loss', info['loss']['Loc'], iter_num, walltime=None)
-            tb_writer.add_scalar('cls_loss', info['loss']['Cla'], iter_num, walltime=None)
-            tb_writer.add_scalar('landm_loss', info['loss']['Landm'], iter_num, walltime=None)
+            tb_writer.add_scalar(
+                'loc_loss', info['loss']['Loc'], iter_num, walltime=None)
+            tb_writer.add_scalar(
+                'cls_loss', info['loss']['Cla'], iter_num, walltime=None)
+            tb_writer.add_scalar(
+                'landm_loss', info['loss']['Landm'], iter_num, walltime=None)
 
             if (epoch + 1) % 10 == 0 or ((epoch + 1) % 5 == 0 and (epoch + 1) > cfg['decay1']):
                 # eval =====================================================================
 
                 # ==========================================================================
-                torch.save(net.state_dict(),
-                           save_folder + cfg['name'] + '_epoch_' + str(epoch + 1) + '.pth')
+                save_path = os.path.join(
+                    save_folder, cfg['name'] + '_epoch_' + str(epoch + 1) + '.pth')
+                save_state(save_path, model=net,
+                           optimizer=optimizer, scaler=None)
 
-    torch.save(net.state_dict(), save_folder + cfg['name'] + '_Final.pth')
+    save_path = os.path.join(save_folder, cfg['name'] + '_Final.pth')
+    save_state(save_path, model=net, optimizer=optimizer, scaler=None)
+
     # torch.save(net.state_dict(), save_folder + 'Final_Retinaface.pth')
 
     # ======================================================================================================
+
+
+def save_state(save_path, model=None, optimizer=None, scheduler=None, scaler=None):
+    if isinstance(save_path, str):
+        save_path = Path(save_path)
+    if not save_path.parent.exists():
+        save_path.parent.mkdir(exist_ok=True, parents=True)
+
+    status = OrderedDict(model=model.state_dict() if model is not None else None,
+                         optimizer=optimizer.state_dict() if optimizer is not None else None,
+                         scheduler=scheduler.state_dict() if scheduler is not None else None,
+                         scaler=scaler.state_dict() if scaler is not None else None)
+
+    torch.save(status, save_path)
 
 
 def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
